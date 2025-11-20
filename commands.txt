@@ -147,9 +147,7 @@ git commit -m ("stt-recorder full-sync: " + (Get-Date -Format 'yyyy-MM-dd HH:mm'
 git push -u origin main
 
 
-cd "$env:USERPROFILE\Desktop\SttRecorderApp"; git add -A; git diff --cached --quiet --exit-code; if ($LASTEXITCODE -ne 0) { git commit -m ("stt-recorder sync: " + (Get-Date -Format 'yyyy-MM-dd HH:mm')); git push } else { Write-Host "No changes to sync." }
 
-
-
+cd "$env:USERPROFILE\Desktop\SttRecorderApp"; if (git status --porcelain) { git add -A; git commit -m ("stt-recorder sync: " + (Get-Date -Format "yyyy-MM-dd HH:mm")); git push } else { Write-Host "No changes to sync." }
 
 

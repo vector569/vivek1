@@ -144,9 +144,7 @@ def normalize_plan(plan_json: dict) -> dict:
             continue
 
         kind = (a.get("kind") or "").strip()
-        if kind not in ALLOWED_ACTION_KINDS:
-            continue
-        if kind == "NoOp":
+        if kind not in ALLOWED_ACTION_KINDS or kind == "NoOp":
             continue
 
         # convert empty strings to None
@@ -156,8 +154,9 @@ def normalize_plan(plan_json: dict) -> dict:
 
         if kind in ("KeyChord", "KeyTap"):
             mk = (a.get("mainKey") or "").strip()
-            # take the first token and drop pipes/plus/etc.
             mk = re.split(r"[|+,\s]+", mk)[0] if mk else None
+            if not mk:   # drop broken key actions
+                continue
             a["mainKey"] = mk
 
             mods = a.get("modifiers") or []
@@ -174,9 +173,14 @@ def normalize_plan(plan_json: dict) -> dict:
                     norm_mods.append(m)
             a["modifiers"] = norm_mods or None
         else:
-            # non-key actions shouldn't carry key fields
             a["mainKey"] = None
             a["modifiers"] = None
+
+        # dedupe consecutive identical TextInput
+        if kind == "TextInput" and cleaned:
+            prev = cleaned[-1]
+            if prev["kind"] == "TextInput" and (prev.get("text") or "").lower() == (a.get("text") or "").lower():
+                continue
 
         cleaned.append(a)
 
@@ -184,6 +188,7 @@ def normalize_plan(plan_json: dict) -> dict:
     if not plan_json.get("name"):
         plan_json["name"] = "LLMPlan"
     return plan_json
+
 
 
 def maybe_rule_based_plan(transcript: str):
@@ -212,15 +217,20 @@ def maybe_rule_based_plan(transcript: str):
         {"kind": "TextInput", "text": app_name},
         {"kind": "KeyTap", "mainKey": "RETURN"},
         {"kind": "Wait", "millisecondsDelay": 1200},
-        {"kind": "KeyTap", "mainKey": "ESC"},  # close Start, ensure focus moves to app
+
+        # focus the newly opened app reliably
+        {"kind": "KeyChord", "mainKey": "TAB", "modifiers": ["MENU"]},  # Alt+Tab
         {"kind": "Wait", "millisecondsDelay": 200},
     ]
     if type_part:
         actions.append({"kind": "TextInput", "text": type_part})
 
+        if type_part:
+            actions.append({"kind": "TextInput", "text": type_part})
 
-    safe_name = re.sub(r"\W+", "", app_name.title())
-    return {"name": f"Open{safe_name}", "actions": actions}
+
+        safe_name = re.sub(r"\W+", "", app_name.title())
+        return {"name": f"Open{safe_name}", "actions": actions}
 
 
 # --------- Endpoint ---------
