@@ -53,6 +53,8 @@ ALLOWED_ACTION_KINDS = [
     "Wait"
 ]
 
+USE_RULE_BASED = False  # keep False so LLM plans run; set True only for fallback testing
+
 def call_ollama(system_prompt: str, user_prompt: str) -> str:
     payload = {
         "model": MODEL,
@@ -208,29 +210,27 @@ def maybe_rule_based_plan(transcript: str):
 
     # remove leading verb
     app_name = re.sub(r"^(open|launch|start)\s+", "", app_part, flags=re.I).strip()
-
     if not app_name:
         return None
 
+    # Human-like Start-menu flow with small waits so search results populate
     actions = [
         {"kind": "KeyTap", "mainKey": "LWIN"},
+        {"kind": "Wait", "millisecondsDelay": 150},
         {"kind": "TextInput", "text": app_name},
+        {"kind": "Wait", "millisecondsDelay": 400},
         {"kind": "KeyTap", "mainKey": "RETURN"},
         {"kind": "Wait", "millisecondsDelay": 1200},
-
-        # focus the newly opened app reliably
-        {"kind": "KeyChord", "mainKey": "TAB", "modifiers": ["MENU"]},  # Alt+Tab
-        {"kind": "Wait", "millisecondsDelay": 200},
     ]
+
     if type_part:
-        actions.append({"kind": "TextInput", "text": type_part})
+        actions += [
+            {"kind": "Wait", "millisecondsDelay": 300},
+            {"kind": "TextInput", "text": type_part},
+        ]
 
-        if type_part:
-            actions.append({"kind": "TextInput", "text": type_part})
-
-
-        safe_name = re.sub(r"\W+", "", app_name.title())
-        return {"name": f"Open{safe_name}", "actions": actions}
+    safe_name = re.sub(r"\W+", "", app_name.title())
+    return {"name": f"Open{safe_name}", "actions": actions}
 
 
 # --------- Endpoint ---------
@@ -241,10 +241,12 @@ def plan(req: PlanRequestDto):
     if not transcript:
         return PlanResponseDto(name="Empty", actions=[])
     
-    rb_plan = maybe_rule_based_plan(transcript)
-    if rb_plan:
-        rb_plan = normalize_plan(rb_plan)
-        return PlanResponseDto(**rb_plan)
+    if USE_RULE_BASED:
+        rb_plan = maybe_rule_based_plan(transcript)
+        if rb_plan:
+            rb_plan = normalize_plan(rb_plan)
+            return PlanResponseDto(**rb_plan)
+
 
 
     user_prompt = {

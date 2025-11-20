@@ -8,6 +8,8 @@ using WindowsInput;                                          // InputSimulator l
 using WindowsInput.Native;                                   // VirtualKeyCode enum (Ctrl, T, W, etc.)
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 
 namespace SttRecorderApp                                     // App namespace shared across all project files
@@ -26,6 +28,10 @@ namespace SttRecorderApp                                     // App namespace sh
 
         // Model: "small" is a good speed/accuracy tradeoff
         private const string WhisperModelName = "small";      // Whisper model size chosen for balance of speed and accuracy
+
+        private CancellationTokenSource? _currentPlanCts;
+        private bool _isExecutingPlan = false;
+
 
         public MainWindow()                                  // Constructor; runs when the window is created
         {
@@ -614,29 +620,149 @@ namespace SttRecorderApp                                     // App namespace sh
         }
 
         // Async versions so multi-step plans can honor Wait without freezing UI.
-        private async Task ExecuteActionAsync(ExecutableAction action)
+
+        private async Task ExecuteActionAsync(ExecutableAction action, CancellationToken token)
         {
             if (action == null) return;
+            token.ThrowIfCancellationRequested();
+
             AudioHistoryList.Items.Add($"    [Action] {DescribeAction(action)}");
 
             switch (action.Kind)
             {
                 case ActionKind.Wait:
                     var ms = action.MillisecondsDelay ?? 0;
-                    if (ms > 0) await Task.Delay(ms);
+                    if (ms > 0) await Task.Delay(ms, token);
                     break;
+
                 default:
-                    ExecuteAction(action); // reuse all existing, proven sync behavior
+                    ExecuteAction(action); // reuse your proven sync behavior
                     break;
             }
         }
 
-        private async Task ExecuteActionsAsync(IEnumerable<ExecutableAction> actions)
+        private async Task ExecuteActionsAsync(IEnumerable<ExecutableAction> actions, CancellationToken token)
         {
             if (actions == null) return;
+
             foreach (var a in actions)
-                await ExecuteActionAsync(a);
+            {
+                token.ThrowIfCancellationRequested();
+                await ExecuteActionAsync(a, token);
+            }
         }
+
+        private bool TryInferOpenedAppKeyword(IReadOnlyList<ExecutableAction> actions, out string keyword)
+        {
+            keyword = "";
+
+            if (actions == null) return false;
+
+            bool sawWin = false;
+
+            foreach (var a in actions)
+            {
+                if (!sawWin)
+                {
+                    if ((a.Kind == ActionKind.KeyTap || a.Kind == ActionKind.KeyChord) &&
+                        a.MainKey is VirtualKeyCode mk &&
+                        (mk == VirtualKeyCode.LWIN || mk == VirtualKeyCode.RWIN))
+                    {
+                        sawWin = true;
+                    }
+                    continue;
+                }
+
+                if (a.Kind == ActionKind.TextInput && !string.IsNullOrWhiteSpace(a.Text))
+                {
+                    keyword = a.Text.Trim();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsAttemptSuccessful(IReadOnlyList<ExecutableAction> actions)
+        {
+            if (!TryInferOpenedAppKeyword(actions, out var keyword))
+                return true; // no inferred goal => don't block on success
+
+            keyword = keyword.ToLowerInvariant();
+            var (proc, title) = GetActiveWindowInfo();
+
+            bool procMatch = !string.IsNullOrWhiteSpace(proc) &&
+                             proc.ToLowerInvariant().Contains(keyword);
+
+            bool titleMatch = !string.IsNullOrWhiteSpace(title) &&
+                              title.ToLowerInvariant().Contains(keyword);
+
+            return procMatch || titleMatch;
+        }
+
+        private async Task ExecutePlanWithRetryAsync(string planName, IReadOnlyList<ExecutableAction> actions)
+        {
+            if (_isExecutingPlan) return;
+            _isExecutingPlan = true;
+
+            _currentPlanCts?.Cancel();
+            _currentPlanCts = new CancellationTokenSource();
+            var token = _currentPlanCts.Token;
+
+            const int maxAttempts = 3;
+
+            try
+            {
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    AudioHistoryList.Items.Add($"  [Plan] {planName}: attempt {attempt}/{maxAttempts}");
+
+                    await ExecuteActionsAsync(actions, token);
+
+                    await Task.Delay(200, token); // let UI/app focus settle
+
+                    if (IsAttemptSuccessful(actions))
+                    {
+                        AudioHistoryList.Items.Add($"  [Plan] {planName}: success.");
+                        break;
+                    }
+
+                    if (attempt < maxAttempts)
+                    {
+                        AudioHistoryList.Items.Add($"  [Plan] {planName}: not successful, retrying...");
+
+                        _inputSimulator.Keyboard.KeyPress(VirtualKeyCode.ESCAPE); // reset Start/search
+
+                        await Task.Delay(200, token);
+                    }
+                    else
+                    {
+                        AudioHistoryList.Items.Add($"  [Plan] {planName}: failed after {maxAttempts} attempts.");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                AudioHistoryList.Items.Add($"  [Plan] {planName}: canceled.");
+            }
+            catch (Exception ex)
+            {
+                AudioHistoryList.Items.Add($"  [Plan] {planName}: executor exception: {ex.Message}");
+            }
+            finally
+            {
+                _isExecutingPlan = false;
+            }
+        }
+
+        private void CancelCurrentPlan()
+        {
+            if (_currentPlanCts != null && !_currentPlanCts.IsCancellationRequested)
+                _currentPlanCts.Cancel();
+        }
+
+
 
 
         // Build the list of low-level actions that should be executed for a given
@@ -666,7 +792,8 @@ namespace SttRecorderApp                                     // App namespace sh
                 AudioHistoryList.Items.Add($"    [Context] Active: {proc} | {title}");
             }
 
-            _ = ExecuteActionsAsync(actions);
+            _ = ExecutePlanWithRetryAsync(planName, actions);
+
 
         }
 
