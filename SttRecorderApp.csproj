@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">                     <!-- Uses the modern .NET SDK-style project format -->
+
+  <PropertyGroup>                                     <!-- Global project settings -->
+    <OutputType>WinExe</OutputType>                   <!-- Build a Windows GUI executable (not a console app or library) -->
+    <TargetFramework>net9.0-windows</TargetFramework> <!-- Target .NET 9 with Windows-specific capabilities -->
+    <Nullable>enable</Nullable>                       <!-- Enable nullable reference type analysis for safer code -->
+    <ImplicitUsings>enable</ImplicitUsings>           <!-- Auto-import common namespaces so we write fewer using lines -->
+    <UseWPF>true</UseWPF>                             <!-- Turn on WPF support (XAML, Window, Application) for this project -->
+  </PropertyGroup>
+
+  <ItemGroup>                                         <!-- Group of NuGet package references -->
+    <PackageReference Include="InputSimulator" Version="1.0.4" />        <!-- Legacy InputSimulator for keyboard simulation (Win32 SendInput) -->
+    <PackageReference Include="InputSimulatorStandard" Version="1.0.0" /><!-- Newer InputSimulatorStandard package (not actively used yet) -->
+    <PackageReference Include="NAudio" Version="2.2.1" />                <!-- NAudio library used for mic capture and WAV writing -->
+  </ItemGroup>
+
+</Project>                                            <!-- End of project file -->

@@ -1,0 +1,43 @@
+﻿<Window x:Class="SttRecorderApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="STT Recorder" Height="450" Width="800">
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Left column: control buttons -->
+        <StackPanel Grid.Column="0" VerticalAlignment="Top">
+            <Button x:Name="StartListeningButton"
+                    Content="Start Listening"
+                    Height="40"
+                    Click="StartListeningButton_Click" />
+
+            <Button x:Name="StopListeningButton"
+                    Content="Stop Listening"
+                    Height="40"
+                    Margin="0,8,0,0"
+                    Click="StopListeningButton_Click" />
+        </StackPanel>
+
+        <!-- Right column: lists -->
+        <Grid Grid.Column="1" Margin="16,0,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Audio history list -->
+            <GroupBox Header="Audio History" Grid.Row="0" Margin="0,0,0,8">
+                <ListBox x:Name="AudioHistoryList" />
+            </GroupBox>
+
+            <!-- STT transcripts list -->
+            <GroupBox Header="STT (Transcripts)" Grid.Row="1">
+                <ListBox x:Name="TranscriptList" />
+            </GroupBox>
+        </Grid>
+    </Grid>
+</Window>

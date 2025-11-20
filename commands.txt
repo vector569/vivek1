@@ -1,0 +1,155 @@
+important terminal and bash commands for mitra
+
+-- wifi rpi connection
+$ip=(1..254|%{$t="192.168.137.$_";if(Test-NetConnection -ComputerName $t -Port 22 -InformationLevel Quiet){$t}}|Select-Object -First 1); if($ip){Write-Host "Pi IP: $ip"; ssh pi@$ip} else {Write-Host "NO_PI_FOUND"}
+
+-- running the app
+
+cd C:\src\camtest
+npx react-native start --reset-cache
+
+cd C:\src\camtest\android; .\gradlew.bat clean; cd .. ; adb reverse tcp:8081 tcp:8081 ; npx react-native run-android --deviceId RZCY32C6R8F
+
+
+-- publishing and finalizng the app
+
+cd C:\src\camtest
+if (!(Test-Path android\app\src\main\assets)) { mkdir android\app\src\main\assets | Out-Null }
+npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android\app\src\main\assets\index.android.bundle --assets-dest android\app\src\main\res
+cd android; .\gradlew.bat installDebug; cd ..
+
+
+
+########################################################################################################################################################################################################################################
+
+
+-- github sync for C:/src
+Run this ONE PowerShell block to sync C:\src to your private repo now (and set it up for future pushes):
+
+cd C:\src
+git init
+git remote remove origin 2>$null; git remote add origin https://github.com/vector569/nextQ.git
+git fetch origin
+git checkout -B main
+git pull origin main --allow-unrelated-histories --no-edit
+if (!(Test-Path .gitignore)) {
+  Invoke-WebRequest https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore -OutFile .gitignore
+  Add-Content .gitignore "`r`n# React Native / Android / iOS`r`n**/node_modules/`r`nandroid/.gradle/`r`nandroid/build/`r`nandroid/app/build/`r`nios/build/`r`nios/Pods/`r`n.vscode/`r`n.idea/`r`n*.log`r`nandroid/app/src/main/assets/index.android.bundle"
+}
+git add -A
+git commit -m ("sync: " + (Get-Date -Format 'yyyy-MM-dd HH:mm')) 2>$null
+git push -u origin main
+
+
+Daily sync (save this one-liner):
+
+cd C:\src; git add -A; git diff --cached --quiet --exit-code; if ($LASTEXITCODE -ne 0) { git commit -m ("sync: " + (Get-Date -Format 'yyyy-MM-dd HH:mm')); git push } else { Write-Host "No changes to sync." }
+
+
+git clone https://github.com/vector569/nextQ.git
+git commit -m "commit message"
+git push -u origin main
+
+git pull origin main
+
+
+
+
+########################################################################################################################################################################################################################################
+http://localhost:5173/
+
+Compress-Archive -Path C:\src\code-twin\lambda\analyze\app.py -DestinationPath C:\src\code-twin\lambda\analyze.zip -Force; aws lambda update-function-code --function-name code-twin-analyze --zip-file fileb://C:\src\code-twin\lambda\analyze.zip; aws lambda wait function-updated --function-name code-twin-analyze; ;
+
+code-twin-uploads-aravi-20250920192616
+
+
+-----------
+Set-Location C:\src\code-twin\lambda\analyze
+# Clean old artifacts
+Remove-Item ..\analyze.zip -Force -ErrorAction SilentlyContinue
+Remove-Item ..\_verify -Recurse -Force -ErrorAction SilentlyContinue
+
+# Zip ONLY the five files (no parent folder)
+Compress-Archive -Path .\app.py, .\graph.py, .\parse_py.py, .\parse_ts.py, .\symbol.py `
+  -DestinationPath ..\analyze.zip -Force
+
+# Sanity-check the zip contents (should show the five files directly under _verify\)
+Expand-Archive -Path ..\analyze.zip -DestinationPath ..\_verify
+Get-ChildItem ..\_verify
+
+
+
+cd C:\src\code-twin\lambda\analyze; 
+Remove-Item ..\analyze.zip -Force -ErrorAction SilentlyContinue; 
+Remove-Item ..\_verify -Recurse -Force -ErrorAction SilentlyContinue; 
+Compress-Archive -Path .\app.py, .\graph.py, .\parse_py.py, .\parse_ts.py, .\symbol.py -DestinationPath ..\analyze.zip -Force; 
+Expand-Archive -Path ..\analyze.zip -DestinationPath ..\_verify; 
+Get-ChildItem ..\_verify   # <-- MUST show the five files directly here (no nested folder); 
+aws lambda update-function-code --function-name code-twin-analyze --zip-file fileb://..\analyze.zip; 
+aws lambda wait function-updated --function-name code-twin-analyze; 
+aws lambda update-function-code --function-name code-twin-analyze --zip-file fileb://..\analyze.zip; 
+aws lambda wait function-updated --function-name code-twin-analyze; 
+aws logs tail /aws/lambda/code-twin-analyze --since 1m --follow; 
+
+-----------
+
+ cd C:\src\code-twin\visualizer
+ npm i
+ npm run dev
+
+
+
+
+
+
+
+
+$InvokeUrl = (aws apigatewayv2 get-api --api-id $ApiId --query ApiEndpoint --output text)
+
+# Should return 400 with a small JSON error if you *omit* key on purpose
+Invoke-RestMethod "$InvokeUrl/analyze?bucket=$env:CT_BUCKET" -Method GET
+
+# Then call with a real key you see in the library list:
+Invoke-RestMethod "$InvokeUrl/analyze?bucket=$env:CT_BUCKET&key=uploads/SuryaBench-main.zip" -Method GET | Format-List
+
+$ApiId=(aws apigatewayv2 get-apis --query "Items[?Name=='code-twin-presigner-api'].ApiId" --output text); $InvokeUrl=(aws apigatewayv2 get-api --api-id $ApiId --query ApiEndpoint --output text); Invoke-WebRequest "$InvokeUrl/analyze?bucket=code-twin-uploads-aravi-20250920192616&key=uploads/tankwork-main.zip" -Method GET -ErrorAction SilentlyContinue | Select-Object StatusCode,Content
+
+
+
+
+
+
+
+# One-time reset + full sync for Desktop\SttRecorderApp
+cd "$env:USERPROFILE\Desktop\SttRecorderApp"
+
+# Init / hook up to repo
+git init
+
+git remote remove origin 2>$null
+git remote add origin https://github.com/vector569/nextQ.git
+
+git fetch origin 2>$null
+git checkout -B main
+git pull origin main --allow-unrelated-histories --no-edit
+
+# Remove .gitignore so NOTHING is ignored (bin/obj included)
+if (Test-Path .gitignore) {
+    Remove-Item .gitignore
+}
+
+# Reset index so previously ignored stuff (bin/obj) can be added
+git rm -r --cached . 2>$null
+
+# Add everything recursively and push
+git add -A
+git commit -m ("stt-recorder full-sync: " + (Get-Date -Format 'yyyy-MM-dd HH:mm')) 2>$null
+git push -u origin main
+
+
+cd "$env:USERPROFILE\Desktop\SttRecorderApp"; git add -A; git diff --cached --quiet --exit-code; if ($LASTEXITCODE -ne 0) { git commit -m ("stt-recorder sync: " + (Get-Date -Format 'yyyy-MM-dd HH:mm')); git push } else { Write-Host "No changes to sync." }
+
+
+
+
+

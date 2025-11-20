@@ -1,0 +1,10 @@
+﻿# Python venv / caches (planner_server)
+planner_server/.venv/
+planner_server/__pycache__/
+**/__pycache__/
+*.pyc
+
+# General cruft
+bin/
+obj/
+.vs/
